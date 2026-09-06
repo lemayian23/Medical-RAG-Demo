@@ -1,0 +1,15 @@
+
+Tamoxifen Mechanism of Action
+
+Tamoxifen is a selective estrogen receptor modulator (SERM) used in the treatment of hormone receptor-positive breast cancer.
+
+Mechanism: Tamoxifen competitively binds to estrogen receptors (ER) on breast cancer cells, blocking estrogen from binding. This prevents estrogen from stimulating tumor growth. In breast tissue, tamoxifen acts as an anti-estrogen. 
+
+Indications:
+- Adjuvant treatment of ER-positive breast cancer
+- Metastatic breast cancer
+- Ductal carcinoma in situ (DCIS)
+- Breast cancer prevention in high-risk women
+
+Side effects include hot flashes, vaginal discharge, and increased risk of endometrial cancer.
+            

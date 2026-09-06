@@ -1,0 +1,150 @@
+# ============================================================
+# Python
+# ============================================================
+
+# Virtual environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+eggs/
+.eggs/
+*.egg
+
+# ============================================================
+# IDE / Editor
+# ============================================================
+
+# VS Code
+.vscode/
+.vscode/settings.json
+.vscode/launch.json
+
+# PyCharm
+.idea/
+*.iml
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ============================================================
+# Data & Index Files (LARGE FILES)
+# ============================================================
+
+# FAISS index (can be large - rebuild on deploy)
+data/index/
+data/index/*.bin
+data/index/*.pkl
+
+# ChromaDB (if you switch to it)
+data/chroma_db/
+
+# Raw data (keep samples, ignore full datasets)
+data/raw/*.csv
+data/raw/*.pdf
+data/raw/*.docx
+# But keep sample text files if they're small
+!data/raw/*.txt
+
+# SQLite database
+*.db
+*.sqlite
+*.sqlite3
+data/*.db
+
+# ============================================================
+# Environment & Secrets
+# ============================================================
+
+# Environment variables (never commit!)
+.env
+.env.local
+.env.*.local
+*.env
+!.env.example
+
+# API keys / secrets
+secrets.yaml
+secrets.json
+config.json
+
+# ============================================================
+# Logs
+# ============================================================
+
+logs/
+*.log
+*.out
+*.err
+
+# ============================================================
+# OS files
+# ============================================================
+
+# Windows
+Thumbs.db
+Desktop.ini
+*.tmp
+
+# Mac
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+.directory
+*~
+
+# ============================================================
+# Ollama models (usually stored elsewhere)
+# ============================================================
+
+ollama_models/
+*.gguf
+
+# ============================================================
+# Docker
+# ============================================================
+
+docker-compose.override.yml
+*.dockerignore
+
+# ============================================================
+# Testing
+# ============================================================
+
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ============================================================
+# Others
+# ============================================================
+
+# Jupyter notebooks
+.ipynb_checkpoints/
+
+# Profiling
+*.prof
+
+# Archives
+*.zip
+*.tar.gz
+*.rar

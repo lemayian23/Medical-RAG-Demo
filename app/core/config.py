@@ -17,12 +17,12 @@ class Config:
     All settings are loaded from environment variables.
     """
 
-    # Embedding Models
+    # Embedding Models (Public - No Auth Required)
     EMBEDDING_MODEL_NAME = os.getenv(
-        "EMBEDDING_MODEL_NAME", "MedCPT/Query-Encoder"
+        "EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2"
     )
     ARTICLE_EMBEDDING_MODEL_NAME = os.getenv(
-        "ARTICLE_EMBEDDING_MODEL_NAME", "MedCPT/Article-Encoder"
+        "ARTICLE_EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2"
     )
 
     # FAISS Index Paths
@@ -35,7 +35,7 @@ class Config:
 
     # LLM (Ollama)
     OLLAMA_MODEL = os.getenv(
-        "OLLAMA_MODEL", "mistral:7b-instruct-v0.2-q4_0"
+        "OLLAMA_MODEL", "llama3.2:1b"
     )
 
     # Logging

@@ -20,10 +20,7 @@ def get_embeddings() -> MedCPTEmbeddings:
     """Singleton pattern for embeddings."""
     global _embeddings
     if _embeddings is None:
-        _embeddings = MedCPTEmbeddings(
-            query_model_name=config.EMBEDDING_MODEL_NAME,
-            article_model_name=config.ARTICLE_EMBEDDING_MODEL_NAME,
-        )
+        _embeddings = MedCPTEmbeddings()  # Simplified: no args needed
     return _embeddings
 
 
@@ -32,7 +29,7 @@ def get_vectorstore() -> FAISSVectorStore:
     global _vectorstore
     if _vectorstore is None:
         _vectorstore = FAISSVectorStore(
-            embedding_dim=768,
+            embedding_dim=384,  # all-MiniLM-L6-v2 uses 384-dim
             index_path=config.FAISS_INDEX_PATH,
             metadata_path=config.METADATA_PATH,
         )

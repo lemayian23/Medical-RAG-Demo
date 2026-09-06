@@ -21,7 +21,7 @@ class FAISSVectorStore:
 
     def __init__(
         self,
-        embedding_dim: int = 768,
+        embedding_dim: int = 384,
         index_path: Optional[str] = None,
         metadata_path: Optional[str] = None,
     ):

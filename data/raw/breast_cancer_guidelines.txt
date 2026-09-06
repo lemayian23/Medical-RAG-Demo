@@ -1,0 +1,13 @@
+
+Breast Cancer Treatment Guidelines
+
+HER2-positive breast cancer is an aggressive subtype that accounts for 15-20% of all breast cancers. 
+Treatment options include:
+1. Trastuzumab (Herceptin) - a monoclonal antibody targeting HER2 receptors
+2. Pertuzumab - another HER2-directed monoclonal antibody
+3. T-DM1 (Kadcyla) - an antibody-drug conjugate
+4. Lapatinib - a small molecule tyrosine kinase inhibitor
+5. Neratinib - an irreversible pan-HER tyrosine kinase inhibitor
+
+First-line treatment for metastatic HER2-positive breast cancer typically combines trastuzumab, pertuzumab, and a taxane.
+            
