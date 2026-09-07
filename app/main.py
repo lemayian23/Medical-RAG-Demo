@@ -33,6 +33,8 @@ from app.agents import (
 )
 from app.utils.logger import get_logger
 
+from app.core.medical_ner import get_ner
+
 # ================================================================
 # APP SETUP
 # ================================================================
@@ -104,6 +106,33 @@ async def ask_question(request: QueryRequest):
     session_id = request.session_id or "default"
 
     logger.info(f"📥 Received query: {query[:50]}...")
+
+@app.post("upload", response_model=UploadResponse)
+async def upload_documents(
+    file: UploadFile = File(...),
+    question: Optional[str] = Form(None),
+):
+    """Upload a medical document with OCR and NER."""
+    # ... existing code ...
+    
+    # Extract medical entities
+    ner = get_ner()
+    entities = ner.extract_entities(result["text"])
+    structured_summary = ner.extract_structured_summary(result["text"])
+    
+    # ... return response with entities ...
+    
+    return UploadResponse(
+        status="success",
+        filename=file.filename,
+        text_preview=result["text"][:500] + ("..." if len(result["text"]) > 500 else ""),
+        structured_data={
+            "entities": [{"text": e.text, "type": e.type} for e in entities],
+            "summary": structured_summary,
+        },
+        ocr_used=result.get("ocr_used", False),
+        message=f"Processed {len(result['text'])} characters, found {len(entities)} entities",
+    )
 
     # ============================================================
     # STEP 1: ROUTE
