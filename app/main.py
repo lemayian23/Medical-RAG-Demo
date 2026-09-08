@@ -3,25 +3,33 @@ Main Application - FastAPI Entrypoint
 Medical RAG Demo: Router → Retriever → Synthesizer → Critic
 """
 
+import io
 import time
 import json
-from typing import List, Dict, Any
+import shutil
+from typing import List, Dict, Any, Optional  # ← ADDED Optional here
 from datetime import datetime
+from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import config
 from app.core.vectorstore import FAISSVectorStore
 from app.core.embeddings import MedCPTEmbeddings
+from app.core.ocr import get_ocr, save_uploaded_file
+
 from app.models.schemas import (
     QueryRequest,
     QueryResponse,
     Source,
     HealthResponse,
     HistoryResponse,
+    UploadResponse,
+    UploadQueryRequest,
 )
+
 from app.agents import (
     router_agent,
     retriever_agent_internal,
@@ -33,11 +41,9 @@ from app.agents import (
 )
 from app.utils.logger import get_logger
 
-from app.core.medical_ner import get_ner
-
-# ================================================================
+# ============================================================
 # APP SETUP
-# ================================================================
+# ============================================================
 
 app = FastAPI(
     title="Medical RAG Demo",
@@ -56,16 +62,12 @@ app.add_middleware(
 
 logger = get_logger(__name__)
 
-# ================================================================
-# QUERY HISTORY (In-memory for demo)
-# ================================================================
-
+# Query history
 query_history: List[Dict[str, Any]] = []
 
-
-# ================================================================
+# ============================================================
 # HEALTH ENDPOINT
-# ================================================================
+# ============================================================
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
@@ -90,62 +92,26 @@ async def health_check():
         )
 
 
-# ================================================================
+# ============================================================
 # QUERY ENDPOINT (The Main Pipeline)
-# ================================================================
+# ============================================================
 
 @app.post("/ask", response_model=QueryResponse)
 async def ask_question(request: QueryRequest):
     """
     Process a medical question through the multi-agent pipeline.
-    
-    Pipeline: Router → Retriever(s) → Synthesizer → Critic (with retry)
     """
     start_time = time.time()
     query = request.query
-    session_id = request.session_id or "default"
 
     logger.info(f"📥 Received query: {query[:50]}...")
 
-@app.post("upload", response_model=UploadResponse)
-async def upload_documents(
-    file: UploadFile = File(...),
-    question: Optional[str] = Form(None),
-):
-    """Upload a medical document with OCR and NER."""
-    # ... existing code ...
-    
-    # Extract medical entities
-    ner = get_ner()
-    entities = ner.extract_entities(result["text"])
-    structured_summary = ner.extract_structured_summary(result["text"])
-    
-    # ... return response with entities ...
-    
-    return UploadResponse(
-        status="success",
-        filename=file.filename,
-        text_preview=result["text"][:500] + ("..." if len(result["text"]) > 500 else ""),
-        structured_data={
-            "entities": [{"text": e.text, "type": e.type} for e in entities],
-            "summary": structured_summary,
-        },
-        ocr_used=result.get("ocr_used", False),
-        message=f"Processed {len(result['text'])} characters, found {len(entities)} entities",
-    )
-
-    # ============================================================
     # STEP 1: ROUTE
-    # ============================================================
     route = router_agent(query)
     logger.info(f"📍 Route: {route}")
 
-    # ============================================================
     # STEP 2: RETRIEVE
-    # ============================================================
     contexts = []
-    sources = []
-
     if route in ("internal_docs", "both"):
         internal_results = retriever_agent_internal(query)
         contexts.extend(internal_results)
@@ -156,39 +122,25 @@ async def upload_documents(
         contexts.extend(web_results)
         logger.info(f"🌐 Web retriever: {len(web_results)} chunks")
 
-    # ============================================================
     # STEP 3: SYNTHESIZE (with Critic Retry Loop)
-    # ============================================================
     max_retries = config.MAX_CRITIC_RETRIES
     grounded = True
     retry_count = 0
     answer = ""
 
     for attempt in range(max_retries):
-        # Generate answer
         answer = synthesizer_agent(query, contexts)
-        logger.info(f"💬 Synthesizer attempt {attempt + 1}: answer length {len(answer)} chars")
-
-        # Validate with Critic
         critique = critic_agent(answer, contexts)
         grounded = critique.get("grounded", True)
-        reason = critique.get("reason", "No reason provided")
 
         if grounded:
-            logger.info(f"✅ Answer grounded: {reason}")
+            logger.info(f"✅ Answer grounded")
             break
         else:
             retry_count += 1
-            logger.warning(f"⚠️ Answer not grounded (attempt {attempt + 1}): {reason}")
-            logger.info("🔄 Retrying synthesis...")
+            logger.warning(f"⚠️ Answer not grounded, retrying...")
 
-    # If still not grounded after all retries, keep the last answer
-    if not grounded:
-        logger.warning(f"⚠️ Final answer NOT grounded after {max_retries} attempts")
-
-    # ============================================================
     # STEP 4: BUILD SOURCES
-    # ============================================================
     sources_list = []
     for ctx in contexts:
         if ctx:
@@ -201,9 +153,7 @@ async def upload_documents(
                 )
             )
 
-    # ============================================================
     # STEP 5: LOG TO HISTORY
-    # ============================================================
     query_history.append({
         "query": query,
         "answer": answer,
@@ -211,19 +161,14 @@ async def upload_documents(
         "route_used": route,
         "retry_count": retry_count,
         "timestamp": datetime.now().isoformat(),
-        "sources": [{"source": s.source, "score": s.score} for s in sources_list],
     })
 
-    # Limit history to 100 entries
     if len(query_history) > 100:
         query_history.pop(0)
 
     elapsed = time.time() - start_time
     logger.info(f"⏱️ Query completed in {elapsed:.2f}s")
 
-    # ============================================================
-    # STEP 6: RETURN RESPONSE
-    # ============================================================
     return QueryResponse(
         answer=answer,
         sources=sources_list,
@@ -233,18 +178,156 @@ async def upload_documents(
     )
 
 
-# ================================================================
+# ============================================================
+# DOCUMENT UPLOAD ENDPOINT (WITH OCR)
+# ============================================================
+
+@app.post("/upload", response_model=UploadResponse)
+async def upload_document(
+    file: UploadFile = File(...),
+    question: Optional[str] = Form(None),  # ← Optional is now imported
+):
+    """
+    Upload a medical document (PDF, image, DOCX, TXT).
+    - Automatically extracts text using OCR for scanned docs/images.
+    - Returns extracted text and structured data.
+    """
+    logger.info(f"📤 Uploading: {file.filename}")
+
+    # Validate file type
+    allowed_extensions = ['pdf', 'jpg', 'jpeg', 'png', 'tiff', 'bmp', 'docx', 'txt']
+    ext = file.filename.split('.')[-1].lower()
+    if ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file format: {ext}. Allowed: {', '.join(allowed_extensions)}"
+        )
+
+    try:
+        # Read file
+        file_data = await file.read()
+
+        # Save file (optional)
+        file_path = save_uploaded_file(file_data, file.filename)
+        logger.info(f"📁 File saved: {file_path}")
+
+        # Process with OCR
+        ocr = get_ocr()
+        result = ocr.process_document(file_data, file.filename)
+
+        if not result["success"]:
+            raise HTTPException(
+                status_code=400,
+                detail=result.get("error", "Failed to process document")
+            )
+
+        # Log query if question provided
+        if question:
+            logger.info(f"📝 Question: {question}")
+
+        # Return response
+        return UploadResponse(
+            status="success",
+            filename=file.filename,
+            text_preview=result["text"][:500] + ("..." if len(result["text"]) > 500 else ""),
+            structured_data=result.get("structured_data"),
+            ocr_used=result.get("ocr_used", False),
+            message=f"Processed {len(result['text'])} characters",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Upload error: {e}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+
+# ============================================================
+# UPLOAD AND QUERY (Combine Upload + Query)
+# ============================================================
+
+@app.post("/upload-and-query", response_model=QueryResponse)
+async def upload_and_query(
+    file: UploadFile = File(...),
+    question: str = Form(...),
+):
+    """
+    Upload a document and immediately ask a question about it.
+    Uses OCR if needed.
+    """
+    logger.info(f"📤 Upload and query: {file.filename}")
+    logger.info(f"📝 Question: {question}")
+
+    try:
+        # Process file with OCR
+        file_data = await file.read()
+        ocr = get_ocr()
+        result = ocr.process_document(file_data, file.filename)
+
+        if not result["success"]:
+            raise HTTPException(
+                status_code=400,
+                detail=result.get("error", "Failed to process document")
+            )
+
+        # Get extracted text
+        doc_text = result["text"]
+
+        # Create a query that includes the document content
+        enhanced_query = f"{question}\n\nContext from document {file.filename}:\n{doc_text[:2000]}"
+
+        # Process through RAG pipeline
+        route = router_agent(enhanced_query)
+        contexts = []
+        if route in ("internal_docs", "both"):
+            contexts.extend(retriever_agent_internal(enhanced_query))
+
+        # Generate answer
+        max_retries = config.MAX_CRITIC_RETRIES
+        grounded = True
+        retry_count = 0
+        answer = ""
+
+        for attempt in range(max_retries):
+            answer = synthesizer_agent(enhanced_query, contexts)
+            critique = critic_agent(answer, contexts)
+            grounded = critique.get("grounded", True)
+            if grounded:
+                break
+            retry_count += 1
+
+        sources_list = []
+        for ctx in contexts:
+            if ctx:
+                sources_list.append(
+                    Source(
+                        id=ctx.get("id", 0),
+                        text=ctx.get("text", ""),
+                        source=ctx.get("source", "unknown"),
+                        score=ctx.get("score", 0.0),
+                    )
+                )
+
+        return QueryResponse(
+            answer=answer,
+            sources=sources_list,
+            grounded=grounded,
+            route_used=route,
+            retry_count=retry_count,
+        )
+
+    except Exception as e:
+        logger.error(f"Upload and query error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================
 # HISTORY ENDPOINT
-# ================================================================
+# ============================================================
 
 @app.get("/history", response_model=List[HistoryResponse])
 async def get_history(limit: int = 10):
-    """
-    Get recent query history.
-    
-    Args:
-        limit: Number of recent queries to return (default: 10)
-    """
+    """Get recent query history."""
     recent = query_history[-limit:] if query_history else []
     return [
         HistoryResponse(
@@ -259,9 +342,9 @@ async def get_history(limit: int = 10):
     ]
 
 
-# ================================================================
+# ============================================================
 # ROOT ENDPOINT
-# ================================================================
+# ============================================================
 
 @app.get("/")
 async def root():
@@ -273,30 +356,29 @@ async def root():
         "endpoints": {
             "/health": "Check system health",
             "/ask": "Ask a medical question (POST)",
+            "/upload": "Upload a document (PDF, image, DOCX, TXT) with OCR",
+            "/upload-and-query": "Upload a document and ask a question about it",
             "/history": "View query history",
             "/docs": "Swagger API documentation",
         },
     }
 
 
-# ================================================================
-# SHUTDOWN EVENT
-# ================================================================
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Log shutdown."""
-    logger.info("🛑 Medical RAG Demo shutting down")
-
-
-# ================================================================
+# ============================================================
 # STARTUP EVENT
-# ================================================================
+# ============================================================
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize components on startup."""
-    logger.info("🚀 Starting Medical RAG Demo...")
+    logger.info("🚀 Starting Medical RAG Demo with OCR support...")
+
+    # Check OCR
+    try:
+        ocr = get_ocr()
+        logger.info("📄 OCR initialized successfully")
+    except Exception as e:
+        logger.warning(f"⚠️ OCR not available: {e}")
 
     # Check vector store
     try:
@@ -307,12 +389,5 @@ async def startup_event():
             logger.warning("⚠️ Vector store is empty! Please run ingest_documents.py first.")
     except Exception as e:
         logger.error(f"❌ Error loading vector store: {e}")
-
-    # Check Ollama
-    try:
-        import ollama
-        logger.info(f"🦙 Ollama model: {config.OLLAMA_MODEL}")
-    except Exception as e:
-        logger.error(f"❌ Ollama not available: {e}")
 
     logger.info("✅ Medical RAG Demo ready!")

@@ -5,15 +5,44 @@ Handles: PDFs, Images (JPG, PNG), Prescriptions, Scanned Documents
 
 import os
 import re
+import io
 import logging
-from typing import Union, Dict, List, Optional
+from typing import Union, Dict, List, Optional, Any
 from pathlib import Path
 
-import pytesseract
-from PIL import Image, ImageEnhance, ImageFilter
-import pdfplumber
-import PyPDF2
-from pdf2image import convert_from_bytes, convert_from_path
+# ============================================================
+# CONDITIONAL IMPORTS FOR OCR DEPENDENCIES
+# ============================================================
+
+try:
+    import pytesseract
+    PYTESSERACT_AVAILABLE = True
+except ImportError:
+    PYTESSERACT_AVAILABLE = False
+    pytesseract = None
+
+try:
+    from PIL import Image, ImageEnhance, ImageFilter
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+    Image = None
+    ImageEnhance = None
+    ImageFilter = None
+
+try:
+    import pdfplumber
+    PDFPLUMBER_AVAILABLE = True
+except ImportError:
+    PDFPLUMBER_AVAILABLE = False
+    pdfplumber = None
+
+try:
+    from pdf2image import convert_from_bytes
+    PDF2IMAGE_AVAILABLE = True
+except ImportError:
+    PDF2IMAGE_AVAILABLE = False
+    convert_from_bytes = None
 
 from app.core.config import config
 
@@ -27,11 +56,20 @@ class MedicalOCR:
 
     def __init__(self):
         """Initialize OCR engine with medical-specific settings."""
+        # Check dependencies
+        if not PYTESSERACT_AVAILABLE:
+            logger.warning("pytesseract not installed. Install with: pip install pytesseract")
+        if not PIL_AVAILABLE:
+            logger.warning("Pillow not installed. Install with: pip install Pillow")
+        if not PDF2IMAGE_AVAILABLE:
+            logger.warning("pdf2image not installed. Install with: pip install pdf2image")
+
         # Set Tesseract path if configured
-        tesseract_path = os.getenv("TESSERACT_PATH")
-        if tesseract_path and os.path.exists(tesseract_path):
-            pytesseract.pytesseract.tesseract_cmd = tesseract_path
-            logger.info(f"Tesseract path set: {tesseract_path}")
+        if PYTESSERACT_AVAILABLE:
+            tesseract_path = os.getenv("TESSERACT_PATH")
+            if tesseract_path and os.path.exists(tesseract_path):
+                pytesseract.pytesseract.tesseract_cmd = tesseract_path
+                logger.info(f"Tesseract path set: {tesseract_path}")
 
         # OCR config for medical text
         self.tesseract_config = os.getenv(
@@ -54,7 +92,7 @@ class MedicalOCR:
     # MAIN PROCESSING METHODS
     # ============================================================
 
-    def process_document(self, file_data: bytes, filename: str) -> Dict[str, Union[str, List, Dict]]:
+    def process_document(self, file_data: bytes, filename: str) -> Dict[str, Any]:
         """
         Main entry point for processing any document.
         """
@@ -71,19 +109,15 @@ class MedicalOCR:
 
         try:
             if ext == 'pdf':
-                result = self.process_pdf(file_data, filename)
+                result = self._process_pdf(file_data, filename)
             elif ext in ['jpg', 'jpeg', 'png', 'tiff', 'bmp']:
-                result = self.process_image(file_data, filename)
+                result = self._process_image(file_data, filename)
             elif ext == 'txt':
                 text = file_data.decode('utf-8')
                 result["text"] = text
                 result["success"] = True
             elif ext == 'docx':
-                from docx import Document
-                doc = Document(io.BytesIO(file_data))
-                text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
-                result["text"] = text
-                result["success"] = True
+                result = self._process_docx(file_data, filename)
             else:
                 result["error"] = f"Unsupported file format: {ext}"
 
@@ -97,7 +131,7 @@ class MedicalOCR:
     # PDF PROCESSING
     # ============================================================
 
-    def process_pdf(self, file_data: bytes, filename: str) -> Dict:
+    def _process_pdf(self, file_data: bytes, filename: str) -> Dict[str, Any]:
         """
         Process PDF: try digital extraction first, then OCR fallback.
         """
@@ -111,49 +145,54 @@ class MedicalOCR:
             "error": None,
         }
 
-        try:
-            # Try digital text extraction first
-            with pdfplumber.open(io.BytesIO(file_data)) as pdf:
-                text_parts = []
-                for page in pdf.pages:
-                    page_text = page.extract_text() or ""
-                    if page_text.strip():
-                        text_parts.append(page_text)
-                text = "\n\n".join(text_parts)
+        # Try digital text extraction first
+        if PDFPLUMBER_AVAILABLE:
+            try:
+                with pdfplumber.open(io.BytesIO(file_data)) as pdf:
+                    text_parts = []
+                    for page in pdf.pages:
+                        page_text = page.extract_text() or ""
+                        if page_text.strip():
+                            text_parts.append(page_text)
+                    text = "\n\n".join(text_parts)
 
-                if text.strip():
-                    result["text"] = text
-                    result["success"] = True
-                    logger.info(f"PDF processed digitally: {filename}")
-                    return result
-        except Exception as e:
-            logger.warning(f"Digital extraction failed for {filename}: {e}")
+                    if text.strip():
+                        result["text"] = text
+                        result["success"] = True
+                        logger.info(f"PDF processed digitally: {filename}")
+                        return result
+            except Exception as e:
+                logger.warning(f"Digital extraction failed for {filename}: {e}")
 
         # Fallback: OCR for scanned PDF
-        try:
-            logger.info(f"Using OCR on scanned PDF: {filename}")
-            images = convert_from_bytes(file_data, dpi=self.dpi)
-            text_parts = []
-            for i, img in enumerate(images):
-                page_text = self._ocr_image(img)
-                text_parts.append(f"--- Page {i+1} ---\n{page_text}")
+        if PYTESSERACT_AVAILABLE and PIL_AVAILABLE and PDF2IMAGE_AVAILABLE:
+            try:
+                logger.info(f"Using OCR on scanned PDF: {filename}")
+                images = convert_from_bytes(file_data, dpi=self.dpi)
+                text_parts = []
+                for i, img in enumerate(images):
+                    page_text = self._ocr_image(img)
+                    text_parts.append(f"--- Page {i+1} ---\n{page_text}")
 
-            result["text"] = "\n\n".join(text_parts)
-            result["ocr_used"] = True
-            result["success"] = True
-            logger.info(f"PDF processed with OCR: {filename}")
-            return result
-
-        except Exception as e:
-            result["error"] = f"OCR failed: {str(e)}"
-            logger.error(f"OCR failed for {filename}: {e}")
+                result["text"] = "\n\n".join(text_parts)
+                result["ocr_used"] = True
+                result["success"] = True
+                logger.info(f"PDF processed with OCR: {filename}")
+                return result
+            except Exception as e:
+                result["error"] = f"OCR failed: {str(e)}"
+                logger.error(f"OCR failed for {filename}: {e}")
+                return result
+        else:
+            if not result["success"]:
+                result["error"] = "OCR not available. Please install: pytesseract, pdf2image, Pillow"
             return result
 
     # ============================================================
     # IMAGE PROCESSING
     # ============================================================
 
-    def process_image(self, file_data: bytes, filename: str) -> Dict:
+    def _process_image(self, file_data: bytes, filename: str) -> Dict[str, Any]:
         """
         Process an image with OCR and medical-specific extraction.
         """
@@ -167,24 +206,24 @@ class MedicalOCR:
             "error": None,
         }
 
+        if not PYTESSERACT_AVAILABLE or not PIL_AVAILABLE:
+            result["error"] = "OCR not available. Please install: pytesseract and Pillow"
+            return result
+
         try:
             image = Image.open(io.BytesIO(file_data))
 
             # Pre-process image for better OCR
             processed_image = self._preprocess_image(image)
-
-            # OCR the image
             text = self._ocr_image(processed_image)
 
             if not text.strip():
-                # Try with different pre-processing
                 processed_image = self._preprocess_image_alt(image)
                 text = self._ocr_image(processed_image)
 
             result["text"] = text
             result["success"] = True if text.strip() else False
 
-            # Try to extract prescription data
             if text.strip():
                 prescription_data = self.extract_prescription_data(text)
                 if any(prescription_data.values()):
@@ -199,10 +238,41 @@ class MedicalOCR:
             return result
 
     # ============================================================
+    # DOCX PROCESSING
+    # ============================================================
+
+    def _process_docx(self, file_data: bytes, filename: str) -> Dict[str, Any]:
+        """
+        Process DOCX file.
+        """
+        result = {
+            "filename": filename,
+            "file_type": "docx",
+            "text": "",
+            "structured_data": {},
+            "ocr_used": False,
+            "success": False,
+            "error": None,
+        }
+
+        try:
+            from docx import Document
+            doc = Document(io.BytesIO(file_data))
+            text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
+            result["text"] = text
+            result["success"] = True
+            logger.info(f"DOCX processed: {filename} ({len(text)} chars)")
+            return result
+        except Exception as e:
+            result["error"] = f"DOCX processing failed: {e}"
+            logger.error(f"DOCX processing failed for {filename}: {e}")
+            return result
+
+    # ============================================================
     # PRESCRIPTION EXTRACTION
     # ============================================================
 
-    def extract_prescription_data(self, text: str) -> Dict:
+    def extract_prescription_data(self, text: str) -> Dict[str, Any]:
         """
         Extract structured data from prescription text.
         """
@@ -247,14 +317,11 @@ class MedicalOCR:
             result["date"] = match.group(1)
 
         # Extract medicines, dosages, frequencies
-        # Simplified patterns for demo
-        medicine_pattern = r'([A-Z][a-z]+)\s*(\d+\s*(?:mg|g|ml|mcg))?\s*([A-Z]{2,3})?'
         for line in lines:
             line = line.strip()
             if not line:
                 continue
 
-            # Look for medicine-like patterns
             match = re.search(r'([A-Z][a-z]+)\s*(\d+\s*(?:mg|g|ml|mcg))?', line)
             if match:
                 med = match.group(1).strip()
@@ -264,7 +331,6 @@ class MedicalOCR:
                     if dosage:
                         result["dosages"].append(dosage)
 
-            # Look for frequency
             freq_match = re.search(r'(OD|BD|TDS|QID|Q4H|Q6H|Q8H|Q12H)', line, re.IGNORECASE)
             if freq_match:
                 result["frequencies"].append(freq_match.group(1).upper())
@@ -280,35 +346,38 @@ class MedicalOCR:
     # IMAGE PRE-PROCESSING
     # ============================================================
 
-    def _preprocess_image(self, image: Image) -> Image:
+    def _preprocess_image(self, image: 'Image') -> 'Image':
         """Pre-process image for better OCR."""
-        # Convert to grayscale
+        if not PIL_AVAILABLE:
+            return image
         if image.mode != 'L':
             image = image.convert('L')
-
-        # Enhance contrast
         enhancer = ImageEnhance.Contrast(image)
         image = enhancer.enhance(2.0)
-
-        # Sharpen
         image = image.filter(ImageFilter.SHARPEN)
-
         return image
 
-    def _preprocess_image_alt(self, image: Image) -> Image:
+    def _preprocess_image_alt(self, image: 'Image') -> 'Image':
         """Alternative pre-processing for hard-to-read images."""
-        # Binarize (threshold)
+        if not PIL_AVAILABLE:
+            return image
         image = image.convert('L')
         image = image.point(lambda x: 255 if x > 160 else 0, '1')
         return image
 
-    def _ocr_image(self, image: Image) -> str:
+    def _ocr_image(self, image: 'Image') -> str:
         """Perform OCR on an image."""
-        return pytesseract.image_to_string(
-            image,
-            config=self.tesseract_config,
-            lang=self.language
-        )
+        if not PYTESSERACT_AVAILABLE or not PIL_AVAILABLE:
+            return ""
+        try:
+            return pytesseract.image_to_string(
+                image,
+                config=self.tesseract_config,
+                lang=self.language
+            )
+        except Exception as e:
+            logger.error(f"OCR error: {e}")
+            return ""
 
 
 # ============================================================
@@ -319,13 +388,10 @@ def save_uploaded_file(file_data: bytes, filename: str, directory: Path = None) 
     """Save uploaded file to disk."""
     if directory is None:
         directory = Path(os.getenv("UPLOAD_DIR", "./data/uploads"))
-
     directory.mkdir(parents=True, exist_ok=True)
     file_path = directory / filename
-
     with open(file_path, 'wb') as f:
         f.write(file_data)
-
     return file_path
 
 
@@ -334,7 +400,6 @@ def save_uploaded_file(file_data: bytes, filename: str, directory: Path = None) 
 # ============================================================
 
 _ocr_instance = None
-
 
 def get_ocr() -> MedicalOCR:
     """Singleton pattern for OCR."""

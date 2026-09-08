@@ -11,19 +11,14 @@ from pydantic import BaseModel, Field
 # ================================================================
 
 class QueryRequest(BaseModel):
-    """
-    Request model for the /ask endpoint.
-    """
+    """Request model for the /ask endpoint."""
+    query: str = Field(..., description="The medical question to be answered")
+    session_id: Optional[str] = Field(None, description="Optional session ID")
 
-    query: str = Field(
-        ...,
-        description="The medical question to be answered",
-        example="What are the treatments for HER2-positive breast cancer?"
-    )
-    session_id: Optional[str] = Field(
-        None,
-        description="Optional session ID for conversation tracking"
-    )
+
+class UploadQueryRequest(BaseModel):
+    """Request model for document upload with optional question."""
+    question: Optional[str] = Field(None, description="Optional question about the document")
 
 
 # ================================================================
@@ -31,10 +26,7 @@ class QueryRequest(BaseModel):
 # ================================================================
 
 class Source(BaseModel):
-    """
-    Source citation model.
-    """
-
+    """Source citation model."""
     id: int = Field(..., description="Unique identifier for the source")
     text: str = Field(..., description="The actual text from the source")
     source: str = Field(..., description="Source document name or identifier")
@@ -42,52 +34,36 @@ class Source(BaseModel):
 
 
 class QueryResponse(BaseModel):
-    """
-    Response model for the /ask endpoint.
-    """
+    """Response model for the /ask endpoint."""
+    answer: str = Field(..., description="The generated answer")
+    sources: List[Source] = Field(default_factory=list, description="List of sources")
+    grounded: bool = Field(..., description="Whether the answer is grounded")
+    route_used: str = Field(..., description="Route used: internal_docs, web_search, or both")
+    retry_count: int = Field(default=0, description="Number of retries")
 
-    answer: str = Field(
-        ...,
-        description="The generated answer to the user's question"
-    )
-    sources: List[Source] = Field(
-        default_factory=list,
-        description="List of sources used to generate the answer"
-    )
-    grounded: bool = Field(
-        ...,
-        description="Whether the answer is grounded in the retrieved context"
-    )
-    route_used: str = Field(
-        ...,
-        description="Route used: internal_docs, web_search, or both"
-    )
-    retry_count: int = Field(
-        default=0,
-        description="Number of retries performed by the critic agent"
-    )
+
+class UploadResponse(BaseModel):
+    """Response model for document upload."""
+    status: str = Field(..., description="Success or failure")
+    filename: str = Field(..., description="Name of uploaded file")
+    text_preview: str = Field(..., description="First 500 characters of extracted text")
+    structured_data: Optional[Dict] = Field(None, description="Structured data extracted")
+    ocr_used: bool = Field(False, description="Whether OCR was used")
+    message: Optional[str] = Field(None, description="Additional information")
 
 
 # ================================================================
-# HEALTH & STATUS MODELS
+# HEALTH & HISTORY MODELS
 # ================================================================
 
 class HealthResponse(BaseModel):
-    """
-    Response model for the /health endpoint.
-    """
-
-    status: str = Field(..., description="Health status", example="ok")
-    vector_count: int = Field(..., description="Number of vectors in FAISS index")
-    model_loaded: bool = Field(..., description="Whether the LLM is loaded")
-    version: str = Field(..., description="API version")
+    status: str
+    vector_count: int
+    model_loaded: bool
+    version: str
 
 
 class HistoryResponse(BaseModel):
-    """
-    Response model for the /history endpoint.
-    """
-
     query_id: int
     query: str
     answer: str
@@ -101,22 +77,11 @@ class HistoryResponse(BaseModel):
 # ================================================================
 
 class IngestRequest(BaseModel):
-    """
-    Request model for document ingestion.
-    """
-
-    folder_path: str = Field(
-        default="./data/raw",
-        description="Path to folder containing medical documents"
-    )
+    folder_path: str = Field(default="./data/raw", description="Path to folder containing medical documents")
 
 
 class IngestResponse(BaseModel):
-    """
-    Response model for document ingestion.
-    """
-
-    status: str = Field(..., description="Success or failure status")
-    documents_processed: int = Field(..., description="Number of documents processed")
-    chunks_created: int = Field(..., description="Number of chunks created")
-    message: Optional[str] = Field(None, description="Additional information")
+    status: str
+    documents_processed: int
+    chunks_created: int
+    message: Optional[str] = None

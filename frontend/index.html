@@ -1,0 +1,1396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MediRAG Assistant</title>
+
+    <!-- ============================================================ -->
+    <!-- STYLES -->
+    <!-- ============================================================ -->
+    <style>
+        /* ---------- RESET & BASE ---------- */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #0d0d0d;
+            color: #e8e8e8;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* ---------- APP CONTAINER ---------- */
+        .app-container {
+            width: 100%;
+            max-width: 1400px;
+            height: 100vh;
+            max-height: 900px;
+            display: flex;
+            background: #1a1a1a;
+            border-radius: 24px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+            margin: 20px;
+        }
+
+        /* ============================================================ */
+        /* SIDEBAR */
+        /* ============================================================ */
+        .sidebar {
+            width: 260px;
+            background: #141414;
+            border-right: 1px solid #2a2a2a;
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            padding: 16px;
+        }
+
+        /* Sidebar Logo */
+        .sidebar-logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 12px 20px 12px;
+            border-bottom: 1px solid #2a2a2a;
+            margin-bottom: 16px;
+        }
+
+        .sidebar-logo .logo-icon {
+            width: 42px;
+            height: 42px;
+            background: linear-gradient(135deg, #4f8cf7, #6c5ce7);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: 700;
+            color: #fff;
+            flex-shrink: 0;
+        }
+
+        .sidebar-logo .logo-text {
+            font-size: 18px;
+            font-weight: 700;
+            color: #f0f0f0;
+            letter-spacing: -0.3px;
+        }
+
+        .sidebar-logo .logo-text span {
+            color: #6c8cff;
+        }
+
+        .sidebar-logo .logo-sub {
+            font-size: 11px;
+            color: #666;
+            font-weight: 400;
+            display: block;
+            margin-top: -2px;
+        }
+
+        /* New Chat Button */
+        .new-chat-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 12px 16px;
+            background: linear-gradient(135deg, #4f8cf7, #6c5ce7);
+            border: none;
+            border-radius: 12px;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+            margin-bottom: 16px;
+            width: 100%;
+        }
+
+        .new-chat-btn:hover {
+            opacity: 0.85;
+        }
+
+        .new-chat-btn:active {
+            transform: scale(0.97);
+        }
+
+        /* Chat History */
+        .history-title {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #555;
+            letter-spacing: 0.5px;
+            padding: 0 8px 8px 8px;
+            border-bottom: 1px solid #222;
+        }
+
+        .history-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 0;
+        }
+
+        .history-list::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .history-list::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 10px;
+        }
+
+        .history-item {
+            padding: 10px 12px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-size: 14px;
+            color: #aaa;
+            margin-bottom: 2px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border: none;
+            background: transparent;
+            width: 100%;
+            text-align: left;
+        }
+
+        .history-item:hover {
+            background: #242424;
+            color: #e8e8e8;
+        }
+
+        .history-item.active {
+            background: #242424;
+            color: #f0f0f0;
+        }
+
+        .history-item .h-icon {
+            font-size: 14px;
+            opacity: 0.5;
+        }
+
+        .history-item .h-text {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .history-item .h-delete {
+            opacity: 0;
+            background: none;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 0 4px;
+        }
+
+        .history-item:hover .h-delete {
+            opacity: 1;
+        }
+
+        .history-item .h-delete:hover {
+            color: #f44336;
+        }
+
+        .history-empty {
+            color: #555;
+            font-size: 13px;
+            text-align: center;
+            padding: 30px 10px;
+            line-height: 1.6;
+        }
+
+        /* Sidebar Footer */
+        .sidebar-footer {
+            padding-top: 12px;
+            border-top: 1px solid #222;
+            text-align: center;
+            font-size: 11px;
+            color: #444;
+        }
+
+        .sidebar-footer .dev-name {
+            color: #666;
+            font-weight: 500;
+        }
+
+        .sidebar-footer .dev-name span {
+            color: #4f8cf7;
+        }
+
+        /* ============================================================ */
+        /* MAIN CHAT AREA */
+        /* ============================================================ */
+        .main-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        /* ---------- HEADER ---------- */
+        .header {
+            padding: 16px 28px;
+            background: #1f1f1f;
+            border-bottom: 1px solid #2a2a2a;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #f0f0f0;
+        }
+
+        .header-title span {
+            color: #6c8cff;
+        }
+
+        .header-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: #888;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4caf50;
+            display: inline-block;
+            animation: pulse-dot 2s infinite;
+        }
+
+        .status-dot.error {
+            background: #f44336;
+        }
+
+        @keyframes pulse-dot {
+            0%,
+            100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.4;
+            }
+        }
+
+        /* ---------- CHAT MESSAGES ---------- */
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px 28px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            scroll-behavior: smooth;
+        }
+
+        .chat-messages::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        .chat-messages::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 10px;
+        }
+
+        /* ---------- MESSAGE BUBBLES ---------- */
+        .message {
+            display: flex;
+            gap: 12px;
+            max-width: 85%;
+            animation: fadeInUp 0.3s ease-out;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.user {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+
+        .message.assistant {
+            align-self: flex-start;
+        }
+
+        .message-avatar {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .message.user .message-avatar {
+            background: linear-gradient(135deg, #4f8cf7, #6c5ce7);
+        }
+
+        .message.assistant .message-avatar {
+            background: #2a2a2a;
+            border: 1px solid #3a3a3a;
+            font-size: 16px;
+        }
+
+        .message-bubble {
+            padding: 14px 18px;
+            border-radius: 16px;
+            font-size: 15px;
+            line-height: 1.6;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        }
+
+        .message.user .message-bubble {
+            background: linear-gradient(135deg, #4f8cf7, #6c5ce7);
+            color: #fff;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant .message-bubble {
+            background: #262626;
+            color: #e0e0e0;
+            border-bottom-left-radius: 4px;
+        }
+
+        /* ---------- SOURCES ---------- */
+        .sources-section {
+            margin-top: 10px;
+            padding: 10px 14px;
+            background: #1e1e1e;
+            border-radius: 10px;
+            border-left: 3px solid #4f8cf7;
+            font-size: 13px;
+            color: #aaa;
+        }
+
+        .sources-section summary {
+            cursor: pointer;
+            font-weight: 500;
+            color: #8ab4f8;
+        }
+
+        .sources-section summary:hover {
+            color: #a8c8ff;
+        }
+
+        .source-item {
+            padding: 6px 0;
+            border-bottom: 1px solid #2a2a2a;
+            font-size: 13px;
+        }
+
+        .source-item:last-child {
+            border-bottom: none;
+        }
+
+        .source-item .source-name {
+            color: #8ab4f8;
+            font-weight: 500;
+        }
+
+        .source-item .source-score {
+            color: #666;
+            font-size: 12px;
+            margin-left: 8px;
+        }
+
+        .source-item .source-text {
+            color: #999;
+            font-size: 12px;
+            margin-top: 4px;
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* ---------- GROUNDED BADGE ---------- */
+        .grounded-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+            margin-top: 6px;
+        }
+
+        .grounded-badge.true {
+            background: #1e3a2a;
+            color: #4caf50;
+        }
+
+        .grounded-badge.false {
+            background: #3a1e1e;
+            color: #f44336;
+        }
+
+        /* ---------- TYPING INDICATOR ---------- */
+        .typing-indicator {
+            display: none;
+            align-self: flex-start;
+            gap: 12px;
+            padding: 12px 18px;
+            background: #262626;
+            border-radius: 16px;
+            border-bottom-left-radius: 4px;
+        }
+
+        .typing-indicator.active {
+            display: flex;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #666;
+            animation: typing-bounce 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes typing-bounce {
+            0%,
+            60%,
+            100% {
+                transform: translateY(0);
+            }
+            30% {
+                transform: translateY(-8px);
+            }
+        }
+
+        /* ---------- INPUT AREA ---------- */
+        .input-area {
+            padding: 16px 28px 24px;
+            background: #1a1a1a;
+            border-top: 1px solid #2a2a2a;
+            flex-shrink: 0;
+        }
+
+        .input-wrapper {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            background: #242424;
+            border-radius: 14px;
+            padding: 8px 8px 8px 18px;
+            border: 1px solid #333;
+            transition: border-color 0.3s;
+        }
+
+        .input-wrapper:focus-within {
+            border-color: #4f8cf7;
+        }
+
+        .input-wrapper textarea {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #e8e8e8;
+            font-size: 15px;
+            font-family: inherit;
+            resize: none;
+            padding: 8px 0;
+            min-height: 44px;
+            max-height: 120px;
+            line-height: 1.5;
+        }
+
+        .input-wrapper textarea::placeholder {
+            color: #555;
+        }
+
+        .input-wrapper button {
+            background: linear-gradient(135deg, #4f8cf7, #6c5ce7);
+            border: none;
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+            flex-shrink: 0;
+            min-height: 44px;
+        }
+
+        .input-wrapper button:hover {
+            opacity: 0.85;
+        }
+
+        .input-wrapper button:active {
+            transform: scale(0.97);
+        }
+
+        .input-wrapper button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* ---------- UPLOAD SECTION ---------- */
+        .upload-section {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .upload-section label {
+            background: #2a2a2a;
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #aaa;
+            cursor: pointer;
+            transition: background 0.2s;
+            border: 1px dashed #444;
+        }
+
+        .upload-section label:hover {
+            background: #333;
+        }
+
+        .upload-section input[type="file"] {
+            display: none;
+        }
+
+        .upload-section .file-name {
+            font-size: 13px;
+            color: #888;
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 100px;
+        }
+
+        .upload-section .upload-status {
+            font-size: 13px;
+            color: #4caf50;
+        }
+
+        /* ---------- FOOTER ---------- */
+        .app-footer {
+            text-align: center;
+            padding: 8px 0 4px 0;
+            font-size: 12px;
+            color: #444;
+            border-top: 1px solid #222;
+            flex-shrink: 0;
+        }
+
+        .app-footer .dev-name {
+            color: #666;
+            font-weight: 500;
+        }
+
+        .app-footer .dev-name span {
+            color: #4f8cf7;
+        }
+
+        /* ---------- RESPONSIVE ---------- */
+        @media (max-width: 768px) {
+            .app-container {
+                max-height: 100vh;
+                border-radius: 0;
+                margin: 0;
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+                max-height: 200px;
+                border-right: none;
+                border-bottom: 1px solid #2a2a2a;
+                padding: 12px;
+                flex-direction: row;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 10px;
+            }
+
+            .sidebar-logo {
+                border-bottom: none;
+                margin-bottom: 0;
+                padding: 0;
+            }
+
+            .new-chat-btn {
+                width: auto;
+                padding: 8px 14px;
+                margin-bottom: 0;
+                font-size: 13px;
+            }
+
+            .history-list {
+                display: none;
+            }
+
+            .sidebar-footer {
+                display: none;
+            }
+
+            .header {
+                padding: 12px 16px;
+            }
+
+            .chat-messages {
+                padding: 16px;
+            }
+
+            .input-area {
+                padding: 12px 16px 18px;
+            }
+
+            .message {
+                max-width: 92%;
+            }
+
+            .app-footer {
+                font-size: 10px;
+                padding: 4px 0 2px 0;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .sidebar {
+                max-height: 160px;
+                padding: 8px 12px;
+            }
+
+            .sidebar-logo .logo-icon {
+                width: 32px;
+                height: 32px;
+                font-size: 16px;
+            }
+
+            .sidebar-logo .logo-text {
+                font-size: 15px;
+            }
+
+            .sidebar-logo .logo-sub {
+                font-size: 9px;
+            }
+
+            .new-chat-btn {
+                font-size: 12px;
+                padding: 6px 12px;
+            }
+
+            .header-title {
+                font-size: 14px;
+            }
+
+            .header-status {
+                font-size: 11px;
+            }
+
+            .message-bubble {
+                font-size: 14px;
+                padding: 10px 14px;
+            }
+
+            .input-wrapper textarea {
+                font-size: 14px;
+            }
+
+            .input-wrapper button {
+                font-size: 13px;
+                padding: 8px 14px;
+                min-height: 38px;
+            }
+
+            .upload-section label {
+                font-size: 11px;
+                padding: 4px 10px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ============================================================ -->
+    <!-- APP CONTAINER -->
+    <!-- ============================================================ -->
+    <div class="app-container">
+
+        <!-- ============================================================ -->
+        <!-- SIDEBAR -->
+        <!-- ============================================================ -->
+        <aside class="sidebar">
+            <!-- Logo -->
+            <div class="sidebar-logo">
+                <div class="logo-icon">🧬</div>
+                <div>
+                    <div class="logo-text">Medi<span>RAG</span></div>
+                    <span class="logo-sub">Medical AI Assistant</span>
+                </div>
+            </div>
+
+            <!-- New Chat Button -->
+            <button class="new-chat-btn" id="newChatBtn">
+                <span>➕</span> New Chat
+            </button>
+
+            <!-- Chat History -->
+            <div class="history-title">Recent Chats</div>
+            <div class="history-list" id="historyList">
+                <!-- Populated by JavaScript -->
+                <div class="history-empty">
+                    No chats yet.<br />
+                    Start a new conversation!
+                </div>
+            </div>
+
+            <!-- Sidebar Footer -->
+            <div class="sidebar-footer">
+                <span class="dev-name">Built by <span>Denis Lemayian Kirionki</span></span>
+            </div>
+        </aside>
+
+        <!-- ============================================================ -->
+        <!-- MAIN AREA -->
+        <!-- ============================================================ -->
+        <main class="main-area">
+
+            <!-- Header -->
+            <header class="header">
+                <div class="header-left">
+                    <div class="header-title">Medical <span>RAG</span> Assistant</div>
+                </div>
+                <div class="header-status">
+                    <span class="status-dot" id="statusDot"></span>
+                    <span id="statusText">Connecting...</span>
+                </div>
+            </header>
+
+            <!-- Chat Messages -->
+            <div class="chat-messages" id="chatMessages">
+                <!-- Welcome message -->
+                <div class="message assistant">
+                    <div class="message-avatar">🧬</div>
+                    <div class="message-bubble">
+                        Hello! I'm your Medical RAG Assistant. I can answer questions from medical documents, upload files for OCR, and provide evidence-based answers with source citations.
+                        <br><br>
+                        <strong>Try asking:</strong>
+                        <br>
+                        • "What are the treatments for HER2-positive breast cancer?"
+                        <br>
+                        • "What is the mechanism of action of Tamoxifen?"
+                        <br>
+                        • Upload a prescription image and ask about it.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Typing Indicator -->
+            <div class="typing-indicator" id="typingIndicator">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="input-area">
+                <div class="input-wrapper">
+                    <textarea
+                    id="userInput"
+                    rows="1"
+                    placeholder="Ask a medical question..."
+                    ></textarea>
+                    <button id="sendBtn">Send</button>
+                </div>
+
+                <!-- Upload Section -->
+                <div class="upload-section">
+                    <label for="fileUpload">📎 Upload Document</label>
+                    <input type="file" id="fileUpload" accept=".pdf,.jpg,.jpeg,.png,.docx,.txt" />
+                    <span class="file-name" id="fileName">No file selected</span>
+                    <span class="upload-status" id="uploadStatus"></span>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <footer class="app-footer">
+                <span class="dev-name">Developed by <span>Denis Lemayian Kirionki</span> &bull; SCIT, Technical University of Kenya</span>
+            </footer>
+
+        </main>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- JAVASCRIPT -->
+    <!-- ============================================================ -->
+    <script>
+        (function() {
+            'use strict';
+
+            // ============================================================
+            // CONFIG
+            // ============================================================
+
+            const API_BASE = 'http://127.0.0.1:8000';
+            const STORAGE_KEY = 'medirag_chat_history';
+
+            // ============================================================
+            // DOM REFS
+            // ============================================================
+
+            const chatMessages = document.getElementById('chatMessages');
+            const userInput = document.getElementById('userInput');
+            const sendBtn = document.getElementById('sendBtn');
+            const typingIndicator = document.getElementById('typingIndicator');
+            const fileInput = document.getElementById('fileUpload');
+            const fileName = document.getElementById('fileName');
+            const uploadStatus = document.getElementById('uploadStatus');
+            const statusDot = document.getElementById('statusDot');
+            const statusText = document.getElementById('statusText');
+            const historyList = document.getElementById('historyList');
+            const newChatBtn = document.getElementById('newChatBtn');
+
+            // ============================================================
+            // STATE
+            // ============================================================
+
+            let isProcessing = false;
+            let currentSessionId = Date.now().toString();
+            let chatHistory = [];
+
+            // ============================================================
+            // STORAGE
+            // ============================================================
+
+            function loadHistory() {
+                try {
+                    const stored = localStorage.getItem(STORAGE_KEY);
+                    if (stored) {
+                        chatHistory = JSON.parse(stored);
+                        renderHistory();
+                    }
+                } catch (e) {
+                    chatHistory = [];
+                }
+            }
+
+            function saveHistory() {
+                try {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(chatHistory));
+                } catch (e) {
+                    // Ignore
+                }
+            }
+
+            // ============================================================
+            // RENDER HISTORY
+            // ============================================================
+
+            function renderHistory() {
+                if (chatHistory.length === 0) {
+                    historyList.innerHTML = `
+                        <div class="history-empty">
+                            No chats yet.<br />
+                            Start a new conversation!
+                        </div>
+                    `;
+                    return;
+                }
+
+                let html = '';
+                // Show most recent first
+                const sorted = [...chatHistory].reverse();
+                for (const item of sorted) {
+                    const isActive = item.sessionId === currentSessionId;
+                    const preview = item.messages && item.messages.length > 0 ?
+                        item.messages[0].content.substring(0, 35) + '...' :
+                        'Empty chat';
+                    html += `
+                        <button class="history-item ${isActive ? 'active' : ''}" 
+                                data-session="${item.sessionId}">
+                            <span class="h-icon">💬</span>
+                            <span class="h-text">${escapeHtml(preview)}</span>
+                            <button class="h-delete" data-session="${item.sessionId}" title="Delete">✕</button>
+                        </button>
+                    `;
+                }
+                historyList.innerHTML = html;
+
+                // Attach event listeners
+                historyList.querySelectorAll('.history-item').forEach(el => {
+                    el.addEventListener('click', function(e) {
+                        // Don't trigger if delete button was clicked
+                        if (e.target.classList.contains('h-delete')) return;
+                        const sessionId = this.dataset.session;
+                        loadChatSession(sessionId);
+                    });
+                });
+
+                historyList.querySelectorAll('.h-delete').forEach(el => {
+                    el.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        const sessionId = this.dataset.session;
+                        deleteChatSession(sessionId);
+                    });
+                });
+            }
+
+            // ============================================================
+            // CHAT SESSION MANAGEMENT
+            // ============================================================
+
+            function createNewChat() {
+                currentSessionId = Date.now().toString();
+                chatHistory.push({
+                    sessionId: currentSessionId,
+                    messages: [],
+                    timestamp: Date.now(),
+                });
+                saveHistory();
+                renderHistory();
+                clearMessages();
+                addWelcomeMessage();
+            }
+
+            function loadChatSession(sessionId) {
+                const session = chatHistory.find(s => s.sessionId === sessionId);
+                if (!session) return;
+
+                currentSessionId = sessionId;
+                renderHistory();
+                renderMessages(session.messages);
+            }
+
+            function deleteChatSession(sessionId) {
+                chatHistory = chatHistory.filter(s => s.sessionId !== sessionId);
+                saveHistory();
+                renderHistory();
+
+                if (currentSessionId === sessionId) {
+                    if (chatHistory.length > 0) {
+                        loadChatSession(chatHistory[chatHistory.length - 1].sessionId);
+                    } else {
+                        createNewChat();
+                    }
+                }
+            }
+
+            function addMessageToHistory(role, content, sources = null, grounded = null) {
+                const session = chatHistory.find(s => s.sessionId === currentSessionId);
+                if (session) {
+                    session.messages.push({
+                        role: role,
+                        content: content,
+                        sources: sources,
+                        grounded: grounded,
+                        timestamp: Date.now(),
+                    });
+                    saveHistory();
+                    renderHistory();
+                }
+            }
+
+            // ============================================================
+            // RENDER MESSAGES
+            // ============================================================
+
+            function clearMessages() {
+                chatMessages.innerHTML = '';
+            }
+
+            function addWelcomeMessage() {
+                const div = document.createElement('div');
+                div.className = 'message assistant';
+                div.innerHTML = `
+                    <div class="message-avatar">🧬</div>
+                    <div class="message-bubble">
+                        Hello! I'm your Medical RAG Assistant. I can answer questions from medical documents, upload files for OCR, and provide evidence-based answers with source citations.
+                        <br><br>
+                        <strong>Try asking:</strong>
+                        <br>
+                        • "What are the treatments for HER2-positive breast cancer?"
+                        <br>
+                        • "What is the mechanism of action of Tamoxifen?"
+                        <br>
+                        • Upload a prescription image and ask about it.
+                    </div>
+                `;
+                chatMessages.appendChild(div);
+                scrollToBottom();
+            }
+
+            function renderMessages(messages) {
+                clearMessages();
+                if (messages.length === 0) {
+                    addWelcomeMessage();
+                    return;
+                }
+                for (const msg of messages) {
+                    const div = document.createElement('div');
+                    div.className = `message ${msg.role}`;
+
+                    const avatar = document.createElement('div');
+                    avatar.className = 'message-avatar';
+                    avatar.textContent = msg.role === 'user' ? '👤' : '🧬';
+
+                    const bubble = document.createElement('div');
+                    bubble.className = 'message-bubble';
+                    bubble.innerHTML = (msg.content || '').replace(/\n/g, '<br>');
+
+                    if (msg.grounded !== null && msg.grounded !== undefined) {
+                        const badge = document.createElement('div');
+                        badge.className = `grounded-badge ${msg.grounded}`;
+                        badge.textContent = msg.grounded ? '✅ Grounded' : '⚠️ Not Grounded';
+                        bubble.appendChild(badge);
+                    }
+
+                    if (msg.sources && msg.sources.length > 0) {
+                        const details = document.createElement('details');
+                        details.className = 'sources-section';
+                        const summary = document.createElement('summary');
+                        summary.textContent = `📚 ${msg.sources.length} source(s)`;
+                        details.appendChild(summary);
+
+                        msg.sources.forEach((s, idx) => {
+                            const item = document.createElement('div');
+                            item.className = 'source-item';
+                            item.innerHTML = `
+                                <span class="source-name">${idx + 1}. ${s.source || 'Unknown'}</span>
+                                <span class="source-score">(${(s.score || 0).toFixed(2)})</span>
+                                <span class="source-text">${(s.text || '').substring(0, 150)}...</span>
+                            `;
+                            details.appendChild(item);
+                        });
+
+                        bubble.appendChild(details);
+                    }
+
+                    div.appendChild(avatar);
+                    div.appendChild(bubble);
+                    chatMessages.appendChild(div);
+                }
+                scrollToBottom();
+            }
+
+            // ============================================================
+            // SCROLL
+            // ============================================================
+
+            function scrollToBottom() {
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+
+            // ============================================================
+            // ADD MESSAGE TO CHAT
+            // ============================================================
+
+            function addMessage(role, content, sources = null, grounded = null) {
+                const div = document.createElement('div');
+                div.className = `message ${role}`;
+
+                const avatar = document.createElement('div');
+                avatar.className = 'message-avatar';
+                avatar.textContent = role === 'user' ? '👤' : '🧬';
+
+                const bubble = document.createElement('div');
+                bubble.className = 'message-bubble';
+                bubble.innerHTML = (content || '').replace(/\n/g, '<br>');
+
+                if (grounded !== null && grounded !== undefined) {
+                    const badge = document.createElement('div');
+                    badge.className = `grounded-badge ${grounded}`;
+                    badge.textContent = grounded ? '✅ Grounded' : '⚠️ Not Grounded';
+                    bubble.appendChild(badge);
+                }
+
+                if (sources && sources.length > 0) {
+                    const details = document.createElement('details');
+                    details.className = 'sources-section';
+                    const summary = document.createElement('summary');
+                    summary.textContent = `📚 ${sources.length} source(s)`;
+                    details.appendChild(summary);
+
+                    sources.forEach((s, idx) => {
+                        const item = document.createElement('div');
+                        item.className = 'source-item';
+                        item.innerHTML = `
+                            <span class="source-name">${idx + 1}. ${s.source || 'Unknown'}</span>
+                            <span class="source-score">(${(s.score || 0).toFixed(2)})</span>
+                            <span class="source-text">${(s.text || '').substring(0, 150)}...</span>
+                        `;
+                        details.appendChild(item);
+                    });
+
+                    bubble.appendChild(details);
+                }
+
+                div.appendChild(avatar);
+                div.appendChild(bubble);
+                chatMessages.appendChild(div);
+
+                typingIndicator.classList.remove('active');
+                scrollToBottom();
+
+                // Save to history
+                addMessageToHistory(role, content, sources, grounded);
+            }
+
+            // ============================================================
+            // TYPING
+            // ============================================================
+
+            function showTyping() {
+                typingIndicator.classList.add('active');
+                scrollToBottom();
+            }
+
+            function hideTyping() {
+                typingIndicator.classList.remove('active');
+            }
+
+            // ============================================================
+            // ESCAPE HTML
+            // ============================================================
+
+            function escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
+            // ============================================================
+            // API STATUS
+            // ============================================================
+
+            async function checkApiStatus() {
+                try {
+                    const res = await fetch(`${API_BASE}/health`);
+                    if (res.ok) {
+                        statusDot.className = 'status-dot';
+                        statusText.textContent = 'Connected';
+                    } else {
+                        throw new Error('API not responding');
+                    }
+                } catch (e) {
+                    statusDot.className = 'status-dot error';
+                    statusText.textContent = 'Disconnected (start the server)';
+                }
+            }
+
+            checkApiStatus();
+            setInterval(checkApiStatus, 10000);
+
+            // ============================================================
+            // SEND QUERY
+            // ============================================================
+
+            async function sendQuery(query) {
+                if (isProcessing) return;
+                if (!query || query.trim() === '') return;
+
+                isProcessing = true;
+                sendBtn.disabled = true;
+
+                addMessage('user', query);
+                userInput.value = '';
+                userInput.style.height = 'auto';
+
+                showTyping();
+
+                try {
+                    const res = await fetch(`${API_BASE}/ask`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ query: query.trim() }),
+                    });
+
+                    hideTyping();
+
+                    if (!res.ok) {
+                        const errText = await res.text();
+                        addMessage('assistant', `❌ Error: ${res.status} - ${errText.substring(0, 200)}`);
+                        return;
+                    }
+
+                    const data = await res.json();
+                    const responseText = data.answer || 'No answer generated.';
+                    addMessage('assistant', responseText, data.sources, data.grounded);
+
+                } catch (error) {
+                    hideTyping();
+                    addMessage('assistant', `❌ Connection error: ${error.message}. Is the server running?`);
+                } finally {
+                    isProcessing = false;
+                    sendBtn.disabled = false;
+                    userInput.focus();
+                }
+            }
+
+            // ============================================================
+            // UPLOAD FILE
+            // ============================================================
+
+            async function uploadFile(file) {
+                if (!file) return;
+                if (isProcessing) return;
+
+                isProcessing = true;
+                sendBtn.disabled = true;
+                uploadStatus.textContent = '⏳ Uploading...';
+                uploadStatus.style.color = '#ffa500';
+
+                const formData = new FormData();
+                formData.append('file', file);
+
+                try {
+                    const res = await fetch(`${API_BASE}/upload`, {
+                        method: 'POST',
+                        body: formData,
+                    });
+
+                    if (!res.ok) {
+                        const err = await res.text();
+                        uploadStatus.textContent = '❌ Upload failed';
+                        uploadStatus.style.color = '#f44336';
+                        addMessage('assistant', `❌ Upload error: ${err.substring(0, 200)}`);
+                        return;
+                    }
+
+                    const data = await res.json();
+                    uploadStatus.textContent = '✅ Uploaded!';
+                    uploadStatus.style.color = '#4caf50';
+
+                    let msg = `📄 **Uploaded:** ${data.filename}\n\n`;
+                    msg += `📝 **Preview:**\n${data.text_preview || 'No text extracted'}\n\n`;
+                    if (data.ocr_used) {
+                        msg += '🔍 OCR was used to extract text.\n';
+                    }
+                    if (data.structured_data && Object.keys(data.structured_data).length > 0) {
+                        msg += '\n**Extracted Data:**\n';
+                        const sd = data.structured_data;
+                        if (sd.medicines && sd.medicines.length) msg += `💊 Medicines: ${sd.medicines.join(', ')}\n`;
+                        if (sd.dosages && sd.dosages.length) msg += `💉 Dosages: ${sd.dosages.join(', ')}\n`;
+                        if (sd.frequencies && sd.frequencies.length) msg += `⏰ Frequencies: ${sd.frequencies.join(', ')}\n`;
+                        if (sd.patient) msg += `🧑 Patient: ${sd.patient}\n`;
+                        if (sd.doctor) msg += `👨‍⚕️ Doctor: ${sd.doctor}\n`;
+                    }
+                    msg += `\n💬 **Ask a question about this document using the chat above.**`;
+
+                    addMessage('assistant', msg);
+
+                } catch (error) {
+                    uploadStatus.textContent = '❌ Error';
+                    uploadStatus.style.color = '#f44336';
+                    addMessage('assistant', `❌ Upload error: ${error.message}`);
+                } finally {
+                    isProcessing = false;
+                    sendBtn.disabled = false;
+                    fileInput.value = '';
+                    fileName.textContent = 'No file selected';
+                }
+            }
+
+            // ============================================================
+            // EVENT LISTENERS
+            // ============================================================
+
+            sendBtn.addEventListener('click', () => {
+                sendQuery(userInput.value);
+            });
+
+            userInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendQuery(userInput.value);
+                }
+            });
+
+            userInput.addEventListener('input', () => {
+                userInput.style.height = 'auto';
+                userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    fileName.textContent = file.name;
+                    uploadFile(file);
+                } else {
+                    fileName.textContent = 'No file selected';
+                }
+            });
+
+            newChatBtn.addEventListener('click', () => {
+                createNewChat();
+            });
+
+            // ============================================================
+            // INIT
+            // ============================================================
+
+            loadHistory();
+            if (chatHistory.length === 0) {
+                createNewChat();
+            } else {
+                // Load the most recent chat
+                const mostRecent = chatHistory[chatHistory.length - 1];
+                loadChatSession(mostRecent.sessionId);
+            }
+
+            userInput.focus();
+
+        })();
+    </script>
+
+</body>
+</html>
