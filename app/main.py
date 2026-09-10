@@ -7,7 +7,7 @@ import io
 import time
 import json
 import shutil
-from typing import List, Dict, Any, Optional  # ← ADDED Optional here
+from typing import List, Dict, Any, Optional
 from datetime import datetime
 from pathlib import Path
 
@@ -19,6 +19,7 @@ from app.core.config import config
 from app.core.vectorstore import FAISSVectorStore
 from app.core.embeddings import MedCPTEmbeddings
 from app.core.ocr import get_ocr, save_uploaded_file
+from app.core.medical_ner import get_ner
 
 from app.models.schemas import (
     QueryRequest,
@@ -27,7 +28,6 @@ from app.models.schemas import (
     HealthResponse,
     HistoryResponse,
     UploadResponse,
-    UploadQueryRequest,
 )
 
 from app.agents import (
@@ -51,7 +51,6 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -62,7 +61,6 @@ app.add_middleware(
 
 logger = get_logger(__name__)
 
-# Query history
 query_history: List[Dict[str, Any]] = []
 
 # ============================================================
@@ -93,14 +91,12 @@ async def health_check():
 
 
 # ============================================================
-# QUERY ENDPOINT (The Main Pipeline)
+# QUERY ENDPOINT
 # ============================================================
 
 @app.post("/ask", response_model=QueryResponse)
 async def ask_question(request: QueryRequest):
-    """
-    Process a medical question through the multi-agent pipeline.
-    """
+    """Process a medical question through the multi-agent pipeline."""
     start_time = time.time()
     query = request.query
 
@@ -179,22 +175,19 @@ async def ask_question(request: QueryRequest):
 
 
 # ============================================================
-# DOCUMENT UPLOAD ENDPOINT (WITH OCR)
+# DOCUMENT UPLOAD ENDPOINT (WITH OCR + NER)
 # ============================================================
 
 @app.post("/upload", response_model=UploadResponse)
 async def upload_document(
     file: UploadFile = File(...),
-    question: Optional[str] = Form(None),  # ← Optional is now imported
+    question: Optional[str] = Form(None),
 ):
     """
-    Upload a medical document (PDF, image, DOCX, TXT).
-    - Automatically extracts text using OCR for scanned docs/images.
-    - Returns extracted text and structured data.
+    Upload a medical document with OCR and NER.
     """
     logger.info(f"📤 Uploading: {file.filename}")
 
-    # Validate file type
     allowed_extensions = ['pdf', 'jpg', 'jpeg', 'png', 'tiff', 'bmp', 'docx', 'txt']
     ext = file.filename.split('.')[-1].lower()
     if ext not in allowed_extensions:
@@ -204,10 +197,7 @@ async def upload_document(
         )
 
     try:
-        # Read file
         file_data = await file.read()
-
-        # Save file (optional)
         file_path = save_uploaded_file(file_data, file.filename)
         logger.info(f"📁 File saved: {file_path}")
 
@@ -221,18 +211,30 @@ async def upload_document(
                 detail=result.get("error", "Failed to process document")
             )
 
-        # Log query if question provided
-        if question:
-            logger.info(f"📝 Question: {question}")
+        # Extract medical entities with NER
+        ner = get_ner()
+        entities = ner.extract_entities(result["text"])
+        structured_summary = ner.extract_structured_summary(result["text"])
 
-        # Return response
+        # Build structured data
+        structured_data = {
+            "entities": [{"text": e.text, "type": e.type} for e in entities],
+            "summary": structured_summary,
+        }
+
+        # If prescription data was extracted by OCR, merge it
+        if result.get("structured_data"):
+            structured_data["prescription"] = result["structured_data"]
+
+        logger.info(f"✅ Processed {file.filename}: {len(result['text'])} chars, {len(entities)} entities")
+
         return UploadResponse(
             status="success",
             filename=file.filename,
             text_preview=result["text"][:500] + ("..." if len(result["text"]) > 500 else ""),
-            structured_data=result.get("structured_data"),
+            structured_data=structured_data,
             ocr_used=result.get("ocr_used", False),
-            message=f"Processed {len(result['text'])} characters",
+            message=f"Processed {len(result['text'])} characters, found {len(entities)} medical entities",
         )
 
     except HTTPException:
@@ -243,7 +245,7 @@ async def upload_document(
 
 
 # ============================================================
-# UPLOAD AND QUERY (Combine Upload + Query)
+# UPLOAD AND QUERY
 # ============================================================
 
 @app.post("/upload-and-query", response_model=QueryResponse)
@@ -251,15 +253,11 @@ async def upload_and_query(
     file: UploadFile = File(...),
     question: str = Form(...),
 ):
-    """
-    Upload a document and immediately ask a question about it.
-    Uses OCR if needed.
-    """
+    """Upload a document and immediately ask a question about it."""
     logger.info(f"📤 Upload and query: {file.filename}")
     logger.info(f"📝 Question: {question}")
 
     try:
-        # Process file with OCR
         file_data = await file.read()
         ocr = get_ocr()
         result = ocr.process_document(file_data, file.filename)
@@ -270,19 +268,14 @@ async def upload_and_query(
                 detail=result.get("error", "Failed to process document")
             )
 
-        # Get extracted text
         doc_text = result["text"]
-
-        # Create a query that includes the document content
         enhanced_query = f"{question}\n\nContext from document {file.filename}:\n{doc_text[:2000]}"
 
-        # Process through RAG pipeline
         route = router_agent(enhanced_query)
         contexts = []
         if route in ("internal_docs", "both"):
             contexts.extend(retriever_agent_internal(enhanced_query))
 
-        # Generate answer
         max_retries = config.MAX_CRITIC_RETRIES
         grounded = True
         retry_count = 0
@@ -356,7 +349,7 @@ async def root():
         "endpoints": {
             "/health": "Check system health",
             "/ask": "Ask a medical question (POST)",
-            "/upload": "Upload a document (PDF, image, DOCX, TXT) with OCR",
+            "/upload": "Upload a document (PDF, image, DOCX, TXT) with OCR + NER",
             "/upload-and-query": "Upload a document and ask a question about it",
             "/history": "View query history",
             "/docs": "Swagger API documentation",
@@ -371,7 +364,7 @@ async def root():
 @app.on_event("startup")
 async def startup_event():
     """Initialize components on startup."""
-    logger.info("🚀 Starting Medical RAG Demo with OCR support...")
+    logger.info("🚀 Starting Medical RAG Demo with OCR + NER + Hybrid Search...")
 
     # Check OCR
     try:
@@ -379,6 +372,13 @@ async def startup_event():
         logger.info("📄 OCR initialized successfully")
     except Exception as e:
         logger.warning(f"⚠️ OCR not available: {e}")
+
+    # Check NER
+    try:
+        ner = get_ner()
+        logger.info("🧬 Medical NER initialized successfully")
+    except Exception as e:
+        logger.warning(f"⚠️ NER not available: {e}")
 
     # Check vector store
     try:
